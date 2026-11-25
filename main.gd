@@ -88,18 +88,20 @@ func _ready() -> void:
 # ---------- materials ----------
 func noise_tex(freq: float, normal: bool) -> NoiseTexture2D:
 	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	n.frequency = freq
 	var t := NoiseTexture2D.new()
 	t.noise = n
-	t.width = 256
-	t.height = 256
+	t.width = 512
+	t.height = 512
 	t.seamless = true
 	if normal:
 		t.as_normal_map = true
-		t.bump_strength = 6.0
+		t.bump_strength = 8.0
 	else:
 		var g := Gradient.new()
-		g.set_color(0, Color(0.4, 0.4, 0.4))
+		g.set_color(0, Color(0.28, 0.28, 0.28))
+		g.set_color(0.5, Color(0.68, 0.68, 0.68))
 		g.set_color(1, Color.WHITE)
 		t.color_ramp = g
 	return t
@@ -110,30 +112,33 @@ func mat(col: Color, rough: float, metal: float, noisy: bool) -> StandardMateria
 	m.albedo_color = col
 	m.roughness = rough
 	m.metallic = metal
+	m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	if noisy:
-		m.albedo_texture = noise_tex(0.03, false)
+		m.albedo_texture = noise_tex(0.035, false)
 		m.normal_enabled = true
-		m.normal_texture = noise_tex(0.08, true)
-		m.normal_scale = 1.3
+		m.normal_texture = noise_tex(0.09, true)
+		m.normal_scale = 1.6
+		m.roughness_texture = noise_tex(0.05, false)
 		m.uv1_triplanar = true
 		m.uv1_world_triplanar = true
-		m.uv1_scale = Vector3.ONE * 0.5
+		m.uv1_scale = Vector3.ONE * 0.45
 	return m
 
 
 func skin_mat(col: Color) -> StandardMaterial3D:
-	var m := mat(col, 0.8, 0.0, true)
+	var m := mat(col, 0.72, 0.0, true)
 	m.uv1_world_triplanar = false
-	m.uv1_scale = Vector3.ONE * 3.0
+	m.uv1_scale = Vector3.ONE * 3.5
+	m.normal_scale = 1.4
 	return m
 
 
 func make_materials() -> void:
-	floor_mat = mat(Color(0.35, 0.35, 0.33), 0.85, 0.0, true)
-	wall_mat = mat(Color(0.3, 0.29, 0.27), 0.85, 0.0, true)
-	metal_mat = mat(Color(0.35, 0.22, 0.14), 0.45, 0.7, true)
-	haz_mat = mat(Color(0.8, 0.65, 0.0), 0.7, 0.0, true)
-	dark_mat = mat(Color(0.06, 0.06, 0.06), 0.8, 0.2, false)
+	floor_mat = mat(Color(0.32, 0.32, 0.3), 0.78, 0.08, true)
+	wall_mat = mat(Color(0.28, 0.27, 0.25), 0.82, 0.05, true)
+	metal_mat = mat(Color(0.38, 0.24, 0.15), 0.38, 0.78, true)
+	haz_mat = mat(Color(0.85, 0.68, 0.02), 0.55, 0.15, true)
+	dark_mat = mat(Color(0.05, 0.05, 0.06), 0.65, 0.35, true)
 
 
 func make_env() -> void:
@@ -141,17 +146,19 @@ func make_env() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color.BLACK
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.2, 0.2, 0.26)
-	env.ambient_light_energy = 0.5
+	env.ambient_light_color = Color(0.22, 0.23, 0.29)
+	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.08
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.02, 0.02, 0.025)
-	env.fog_density = 0.05
+	env.fog_light_color = Color(0.025, 0.025, 0.03)
+	env.fog_density = 0.045
 	env.glow_enabled = true
-	env.glow_intensity = 0.7
+	env.glow_intensity = 0.75
+	env.glow_bloom = 0.15
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.12
-	env.adjustment_saturation = 0.85
+	env.adjustment_contrast = 1.15
+	env.adjustment_saturation = 0.92
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -179,7 +186,11 @@ func box(pos: Vector3, size: Vector3, m: Material, solid := true) -> StaticBody3
 
 
 func wall(x: float, z: float, w: float, d: float) -> StaticBody3D:
-	return box(Vector3(x, 2.5, z), Vector3(w, 5, d), wall_mat)
+	var wb := box(Vector3(x, 2.5, z), Vector3(w, 5, d), wall_mat)
+	# base trim & ceiling beam for richer architectural depth
+	pb(self, Vector3(w + 0.04, 0.22, d + 0.04), Vector3(x, 0.11, z), dark_mat)
+	pb(self, Vector3(w + 0.04, 0.25, d + 0.04), Vector3(x, 4.88, z), metal_mat)
+	return wb
 
 
 func pb(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> MeshInstance3D:
@@ -206,8 +217,8 @@ func mk_sph(r: float) -> SphereMesh:
 	var s := SphereMesh.new()
 	s.radius = r
 	s.height = r * 2.0
-	s.radial_segments = 16
-	s.rings = 8
+	s.radial_segments = 20
+	s.rings = 12
 	return s
 
 
@@ -215,8 +226,8 @@ func mk_cap(r: float, h: float) -> CapsuleMesh:
 	var c := CapsuleMesh.new()
 	c.radius = r
 	c.height = maxf(h, r * 2.0 + 0.01)
-	c.radial_segments = 12
-	c.rings = 4
+	c.radial_segments = 16
+	c.rings = 6
 	return c
 
 
@@ -229,12 +240,13 @@ func mk_box(s: Vector3) -> BoxMesh:
 func led(pos: Vector3, col: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var sp := SphereMesh.new()
-	sp.radius = 0.07
-	sp.height = 0.14
+	sp.radius = 0.075
+	sp.height = 0.15
 	var lm := StandardMaterial3D.new()
 	lm.albedo_color = col
 	lm.emission_enabled = true
 	lm.emission = col
+	lm.emission_energy_multiplier = 1.6
 	mi.mesh = sp
 	mi.material_override = lm
 	mi.position = pos
@@ -253,6 +265,7 @@ func add_light(col: Color, energy: float, rng: float, pos: Vector3, flicker := t
 	l.light_color = col
 	l.light_energy = energy
 	l.omni_range = rng
+	l.omni_attenuation = 1.35
 	l.position = pos
 	add_child(l)
 	if flicker:
@@ -265,7 +278,7 @@ func pipe(pos: Vector3, length: float, r: float) -> void:
 	cm.top_radius = r
 	cm.bottom_radius = r
 	cm.height = length
-	cm.radial_segments = 10
+	cm.radial_segments = 14
 	var mi := part(self, cm, pos, metal_mat)
 	mi.rotation_degrees.x = 90
 
@@ -276,6 +289,8 @@ func sign3d(parent: Node3D, txt: String, pos: Vector3, rot_y: float, col: Color,
 	l.font_size = fs
 	l.pixel_size = 0.005
 	l.modulate = col
+	l.outline_size = 6
+	l.outline_modulate = Color(0.05, 0.05, 0.05, 0.9)
 	l.position = pos
 	l.rotation_degrees.y = rot_y
 	parent.add_child(l)
@@ -284,54 +299,32 @@ func sign3d(parent: Node3D, txt: String, pos: Vector3, rot_y: float, col: Color,
 
 func add_cone(pos: Vector3) -> void:
 	var cm := CylinderMesh.new()
-	cm.top_radius = 0.15
-	cm.bottom_radius = 1.3
+	cm.top_radius = 0.14
+	cm.bottom_radius = 1.25
 	cm.height = 4.6
-	cm.radial_segments = 16
+	cm.radial_segments = 20
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(1, 0.9, 0.65, 0.05)
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	m.albedo_color = Color(1, 0.9, 0.65, 0.04)
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	part(self, cm, pos, m)
 
 
-func add_dust(pos: Vector3, ext: Vector3) -> void:
-	var p := GPUParticles3D.new()
-	p.amount = 90
-	p.lifetime = 8.0
-	p.preprocess = 8.0
-	var pmat := ParticleProcessMaterial.new()
-	pmat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pmat.emission_box_extents = ext
-	pmat.gravity = Vector3(0, -0.02, 0)
-	pmat.direction = Vector3(1, 0.2, 0)
-	pmat.spread = 180.0
-	pmat.initial_velocity_min = 0.02
-	pmat.initial_velocity_max = 0.08
-	p.process_material = pmat
-	var q := QuadMesh.new()
-	q.size = Vector2(0.03, 0.03)
-	var qm := StandardMaterial3D.new()
-	qm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	qm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	qm.albedo_color = Color(1, 1, 1, 0.35)
-	qm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	q.material = qm
-	p.draw_pass_1 = q
-	p.position = pos
-	p.visibility_aabb = AABB(-ext, ext * 2.0)
-	add_child(p)
+# Floating blobs removed per request.
+func add_dust(_pos: Vector3, _ext: Vector3) -> void:
+	pass
 
 
 func make_key() -> Node3D:
 	var k := Node3D.new()
 	var gm := StandardMaterial3D.new()
-	gm.albedo_color = Color(1, 0.8, 0.2)
+	gm.albedo_color = Color(1, 0.82, 0.22)
 	gm.metallic = 1.0
-	gm.roughness = 0.3
+	gm.roughness = 0.25
 	gm.emission_enabled = true
-	gm.emission = Color(0.5, 0.35, 0.0)
+	gm.emission = Color(0.55, 0.38, 0.02)
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.08
 	tm.outer_radius = 0.16
@@ -358,8 +351,9 @@ func build_level() -> void:
 	wall(2.75, -30, 2.5, 0.4)
 	box(Vector3(0, 4.5, -30), Vector3(3, 1, 0.4), haz_mat, false)
 	door = box(Vector3(0, 2, -30), Vector3(3, 4, 0.4), metal_mat)
+	pb(door, Vector3(2.4, 0.35, 0.46), Vector3(0, -0.7, 0), haz_mat)
 	door_led = led(Vector3(0, 4.85, -29.7), Color(1, 0, 0))
-	sign3d(door, "MAIN EXIT", Vector3(0, 1.2, 0.21), 0, Color(1, 0.1, 0.1), 40)
+	sign3d(door, "MAIN EXIT", Vector3(0, 1.2, 0.22), 0, Color(1, 0.12, 0.12), 40)
 	# left room (password + vault)
 	wall(-14, -10, 0.4, 12)
 	wall(-9, -4, 10, 0.4)
@@ -371,9 +365,9 @@ func build_level() -> void:
 	key_node = make_key()
 	key_node.position = Vector3(-12, 1.6, -14.5)
 	add_child(key_node)
-	key_light = add_light(Color(1, 0.8, 0.35), 0.8, 6, Vector3(-12, 2, -14.5), false)
+	key_light = add_light(Color(1, 0.8, 0.35), 0.85, 6, Vector3(-12, 2, -14.5), false)
 	# terminal on the wall
-	var dk := mat(Color(0.08, 0.08, 0.08), 0.6, 0.6, false)
+	var dk := mat(Color(0.08, 0.08, 0.08), 0.55, 0.65, false)
 	pb(self, Vector3(1.8, 1.3, 0.2), Vector3(-8, 1.45, -4.3), dk)
 	pb(self, Vector3(1.2, 0.25, 0.3), Vector3(-8, 0.7, -4.45), dk)
 	for i in 6:
@@ -386,7 +380,7 @@ func build_level() -> void:
 	var sm := StandardMaterial3D.new()
 	sm.albedo_color = Color(0.01, 0.06, 0.03)
 	sm.emission_enabled = true
-	sm.emission = Color(0.0, 0.08, 0.03)
+	sm.emission = Color(0.0, 0.09, 0.035)
 	term_node = pb(self, Vector3(1.5, 0.95, 0.08), Vector3(-8, 1.55, -4.43), sm)
 	term_label = Label3D.new()
 	term_label.text = "TAP TO ENTER\nPASSWORD"
@@ -397,7 +391,7 @@ func build_level() -> void:
 	term_label.position = Vector3(0, 0, -0.05)
 	term_node.add_child(term_label)
 	term_led = led(Vector3(-7.4, 2.0, -4.5), Color(1, 0, 0))
-	add_light(Color(0.2, 1, 0.4), 0.6, 5, Vector3(-8, 1.6, -5.4), false)
+	add_light(Color(0.2, 1, 0.4), 0.65, 5, Vector3(-8, 1.6, -5.4), false)
 	# hall decor
 	for p in [Vector2(-3.4, -6), Vector2(3.4, -6), Vector2(-3.4, -14), Vector2(3.4, -14), Vector2(-3.4, -22), Vector2(3.4, -22)]:
 		box(Vector3(p.x, 2.5, p.y), Vector3(0.7, 5, 0.7), metal_mat)
@@ -421,36 +415,38 @@ func build_level() -> void:
 	wall(9, -16, 10, 0.4)
 	var gl := StandardMaterial3D.new()
 	gl.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	gl.albedo_color = Color(0.5, 0.7, 0.6, 0.2)
+	gl.roughness = 0.1
+	gl.albedo_color = Color(0.55, 0.78, 0.7, 0.18)
 	box(Vector3(9, 2, -15.7), Vector3(6, 4, 0.1), gl, false)
-	# lights + fake light shafts
+	# lights + subtle light shafts
 	var lamp_mat := StandardMaterial3D.new()
 	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	lamp_mat.albedo_color = Color(1, 0.92, 0.7)
+	lamp_mat.albedo_color = Color(1, 0.92, 0.72)
 	for z in [-4, -12, -20, -27]:
-		add_light(Color(1, 0.85, 0.63), 1.1, 14, Vector3(0, 4.6, z))
-		pb(self, Vector3(1, 0.1, 0.3), Vector3(0, 4.9, z), lamp_mat)
+		add_light(Color(1, 0.85, 0.63), 1.15, 14, Vector3(0, 4.6, z))
+		pb(self, Vector3(1.05, 0.12, 0.34), Vector3(0, 4.92, z), dark_mat)
+		pb(self, Vector3(0.95, 0.08, 0.26), Vector3(0, 4.88, z), lamp_mat)
 		add_cone(Vector3(0, 2.4, z))
-	add_light(Color(1, 0.13, 0), 1.4, 12, Vector3(9, 3.5, -10))
-	add_light(Color(1, 0.6, 0), 0.8, 10, Vector3(12, 3, -14))
-	add_dust(Vector3(0, 2.5, -12), Vector3(3.8, 2.4, 17))
-	add_dust(Vector3(-9, 2.5, -10), Vector3(4.5, 2.4, 5.5))
-	add_dust(Vector3(9, 2.5, -10), Vector3(4.5, 2.4, 5.5))
+	add_light(Color(1, 0.13, 0), 1.45, 12, Vector3(9, 3.5, -10))
+	add_light(Color(1, 0.6, 0), 0.85, 10, Vector3(12, 3, -14))
 
 
 func make_crate(pos: Vector3) -> Dictionary:
 	var root := StaticBody3D.new()
 	root.position = pos
 	add_child(root)
-	var cm := mat(Color(0.3, 0.21, 0.13), 0.9, 0.0, true)
+	var cm := mat(Color(0.32, 0.22, 0.13), 0.86, 0.04, true)
 	pb(root, Vector3(1.6, 0.1, 1.6), Vector3(0, 0.05, 0), cm)
 	pb(root, Vector3(1.6, 1.1, 0.1), Vector3(0, 0.65, 0.75), cm)
 	pb(root, Vector3(1.6, 1.1, 0.1), Vector3(0, 0.65, -0.75), cm)
 	pb(root, Vector3(0.1, 1.1, 1.4), Vector3(0.75, 0.65, 0), cm)
 	pb(root, Vector3(0.1, 1.1, 1.4), Vector3(-0.75, 0.65, 0), cm)
+	# cross slat detail
+	pb(root, Vector3(1.42, 0.12, 0.12), Vector3(0, 0.65, 0.8), cm)
+	pb(root, Vector3(1.42, 0.12, 0.12), Vector3(0, 0.65, -0.8), cm)
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
-			pb(root, Vector3(0.14, 1.2, 0.14), Vector3(sx * 0.78, 0.65, sz * 0.78), metal_mat)
+			pb(root, Vector3(0.15, 1.22, 0.15), Vector3(sx * 0.78, 0.65, sz * 0.78), metal_mat)
 	var lid := pb(root, Vector3(1.7, 0.12, 1.7), Vector3(0, 1.26, 0), cm)
 	var cs := CollisionShape3D.new()
 	var shp := BoxShape3D.new()
@@ -467,9 +463,8 @@ func build_third_room() -> void:
 	wall(-6, -40, 0.4, 20)
 	wall(6, -40, 0.4, 20)
 	wall(0, -50, 12.4, 0.4)
-	add_light(Color(1, 0.8, 0.6), 0.7, 12, Vector3(0, 4.6, -36))
-	add_light(Color(1, 0.8, 0.6), 0.6, 12, Vector3(0, 4.6, -44))
-	add_dust(Vector3(0, 2.5, -40), Vector3(5.8, 2.4, 9.5))
+	add_light(Color(1, 0.8, 0.6), 0.75, 12, Vector3(0, 4.6, -36))
+	add_light(Color(1, 0.8, 0.6), 0.65, 12, Vector3(0, 4.6, -44))
 	for z in [-38.0, -45.0]:
 		for x in [-3.5, 0.0, 3.5]:
 			crates.append(make_crate(Vector3(x, 0, z)))
@@ -492,681 +487,140 @@ func build_third_room() -> void:
 	add_child(hl_spot)
 
 
-# ---------- the Verity monster ----------
-func make_verity() -> Node3D:
+# ---------- the Verity monster & smiley follower ----------
+func attach_smiley_face(parent_head: Node3D, z_pos: float, radius: float) -> void:
+	var smile_yellow := StandardMaterial3D.new()
+	smile_yellow.albedo_color = Color(1.0, 0.84, 0.08)
+	smile_yellow.roughness = 0.45
+	smile_yellow.metallic = 0.0
+	smile_yellow.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+
+	var ink := StandardMaterial3D.new()
+	ink.albedo_color = Color(0.05, 0.05, 0.05)
+	ink.roughness = 0.3
+	ink.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ink.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+
+	# Yellow smiley face disc on the front of the head
+	var face_disc := CylinderMesh.new()
+	face_disc.top_radius = radius
+	face_disc.bottom_radius = radius
+	face_disc.height = 0.04
+	face_disc.radial_segments = 28
+	var fmi := part(parent_head, face_disc, Vector3(0, 0.02, z_pos), smile_yellow)
+	fmi.rotation_degrees.x = 90
+
+	# Two eyes
+	for ex in [-radius * 0.34, radius * 0.34]:
+		part(parent_head, mk_sph(radius * 0.13), Vector3(ex, radius * 0.22, z_pos + 0.025), ink)
+
+	# Curved smile made of angled segments
+	var smile_pts := [
+		Vector2(-radius * 0.52, -radius * 0.06),
+		Vector2(-radius * 0.34, -radius * 0.28),
+		Vector2(-radius * 0.12, -radius * 0.38),
+		Vector2(radius * 0.12, -radius * 0.38),
+		Vector2(radius * 0.34, -radius * 0.28),
+		Vector2(radius * 0.52, -radius * 0.06),
+	]
+	for i in smile_pts.size() - 1:
+		var a: Vector2 = smile_pts[i]
+		var b: Vector2 = smile_pts[i + 1]
+		var mid := (a + b) * 0.5
+		var diff := b - a
+		var seg := part(parent_head, mk_box(Vector3(diff.length() + 0.025, radius * 0.09, 0.03)), Vector3(mid.x, mid.y, z_pos + 0.025), ink)
+		seg.rotation.z = atan2(diff.y, diff.x)
+		# Smile end hooks
+		if i == 0:
+			var hk1 := part(parent_head, mk_box(Vector3(radius * 0.12, radius * 0.07, 0.03)), Vector3(a.x - 0.01, a.y + 0.03, z_pos + 0.025), ink)
+			hk1.rotation.z = 0.75
+		if i == smile_pts.size() - 2:
+			var hk2 := part(parent_head, mk_box(Vector3(radius * 0.12, radius * 0.07, 0.03)), Vector3(b.x + 0.01, b.y + 0.03, z_pos + 0.025), ink)
+			hk2.rotation.z = -0.75
+
+
+func make_verity(smiley_face := false) -> Node3D:
 	var m := Node3D.new()
 	var skin := skin_mat(Color(0.58, 0.44, 0.26))
-	var rib := mat(Color(0.28, 0.19, 0.1), 1.0, 0.0, false)
+	var rib := mat(Color(0.28, 0.19, 0.1), 0.9, 0.0, false)
 	var blk := StandardMaterial3D.new()
 	blk.albedo_color = Color.BLACK
 	blk.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	blk.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	var teeth := StandardMaterial3D.new()
 	teeth.albedo_color = Color(0.85, 0.8, 0.65)
 	teeth.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# torso, belly, pelvis, ribs
-	var chest := part(m, mk_cap(0.24, 1.0), Vector3(0, 2.45, 0), skin)
+	teeth.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+
+	# torso pivot for organic breathing/sway animation
+	var torso_piv := Node3D.new()
+	torso_piv.name = "torso_piv"
+	m.add_child(torso_piv)
+
+	var chest := part(torso_piv, mk_cap(0.24, 1.0), Vector3(0, 2.45, 0), skin)
 	chest.scale = Vector3(1.0, 1.0, 0.65)
-	var belly := part(m, mk_sph(0.2), Vector3(0, 1.97, 0), skin)
+	var belly := part(torso_piv, mk_sph(0.2), Vector3(0, 1.97, 0), skin)
 	belly.scale = Vector3(1.1, 0.9, 0.7)
 	var pelvis := part(m, mk_sph(0.22), Vector3(0, 1.8, 0), skin)
 	pelvis.scale = Vector3(1.0, 0.7, 0.75)
 	for i in 6:
-		var r := part(m, mk_cap(0.02, 0.5 - i * 0.02), Vector3(0, 2.1 + i * 0.12, 0.15), rib)
+		var r := part(torso_piv, mk_cap(0.02, 0.5 - i * 0.02), Vector3(0, 2.1 + i * 0.12, 0.15), rib)
 		r.rotation_degrees.z = 90
-	# legs with knees and feet
+
+	# animated legs with hip, knee, and foot pivots
 	for sx in [-1.0, 1.0]:
 		var x: float = sx * 0.17
-		part(m, mk_cap(0.075, 0.95), Vector3(x, 1.35, 0), skin)
-		part(m, mk_sph(0.085), Vector3(x, 0.9, 0), skin)
-		part(m, mk_cap(0.06, 0.92), Vector3(x, 0.45, 0), skin)
-		var foot := part(m, mk_sph(0.1), Vector3(x, 0.05, 0.12), skin)
+		var hip := Node3D.new()
+		hip.name = "leg_l" if sx < 0 else "leg_r"
+		hip.position = Vector3(x, 1.72, 0)
+		m.add_child(hip)
+		part(hip, mk_cap(0.075, 0.82), Vector3(0, -0.37, 0), skin)
+
+		var knee := Node3D.new()
+		knee.name = "knee_l" if sx < 0 else "knee_r"
+		knee.position = Vector3(0, -0.82, 0)
+		hip.add_child(knee)
+		part(knee, mk_sph(0.085), Vector3.ZERO, skin)
+		part(knee, mk_cap(0.06, 0.82), Vector3(0, -0.42, 0), skin)
+		var foot := part(knee, mk_sph(0.1), Vector3(0, -0.85, 0.12), skin)
 		foot.scale = Vector3(0.9, 0.4, 2.4)
 		for t in 3:
-			part(m, mk_sph(0.025), Vector3(x + (t - 1) * 0.045, 0.03, 0.3), skin)
-	# very long arms with hands and fingers
+			part(knee, mk_sph(0.025), Vector3((t - 1) * 0.045, -0.87, 0.3), skin)
+
+	# animated arms with shoulder, elbow, and hand pivots
 	for sx in [-1.0, 1.0]:
 		var ax: float = sx * 0.4
-		part(m, mk_sph(0.1), Vector3(ax * 0.9, 2.82, 0), skin)
-		part(m, mk_cap(0.05, 0.95), Vector3(ax, 2.38, 0), skin)
-		part(m, mk_sph(0.06), Vector3(ax, 1.9, 0), skin)
+		var shoulder := Node3D.new()
+		shoulder.name = "arm_l" if sx < 0 else "arm_r"
+		shoulder.position = Vector3(ax * 0.9, 2.82, 0)
+		torso_piv.add_child(shoulder)
+		part(shoulder, mk_sph(0.1), Vector3.ZERO, skin)
+		part(shoulder, mk_cap(0.05, 0.9), Vector3(ax * 0.1, -0.44, 0), skin)
+
+		var elbow := Node3D.new()
+		elbow.name = "elbow_l" if sx < 0 else "elbow_r"
+		elbow.position = Vector3(ax * 0.1, -0.92, 0)
+		shoulder.add_child(elbow)
+		part(elbow, mk_sph(0.06), Vector3.ZERO, skin)
 		var fr := 0.06 if sx < 0 else 0.045
-		part(m, mk_cap(fr, 1.0), Vector3(ax, 1.4, 0), skin)
-		var hand := part(m, mk_sph(0.07), Vector3(ax, 0.82, 0), skin)
+		part(elbow, mk_cap(fr, 0.98), Vector3(0, -0.5, 0), skin)
+		var hand := part(elbow, mk_sph(0.07), Vector3(0, -1.08, 0), skin)
 		hand.scale = Vector3(0.8, 1.4, 0.5)
 		for f in 4:
-			part(m, mk_cap(0.012, 0.24), Vector3(ax + (f - 1.5) * 0.028, 0.66, 0), skin)
-	# neck and the tilted head
-	var neck := part(m, mk_cap(0.05, 0.65), Vector3(-0.22, 3.05, 0), skin)
+			part(elbow, mk_cap(0.012, 0.24), Vector3((f - 1.5) * 0.028, -1.24, 0), skin)
+
+	# neck and tilted head
+	var neck := part(torso_piv, mk_cap(0.05, 0.65), Vector3(-0.22, 3.05, 0), skin)
 	neck.rotation.z = 1.06
 	var hg := Node3D.new()
+	hg.name = "head_piv"
 	hg.position = Vector3(-0.5, 3.22, 0.02)
 	hg.rotation.z = 1.15
-	m.add_child(hg)
+	torso_piv.add_child(hg)
 	var skull := part(hg, mk_sph(0.25), Vector3.ZERO, skin)
 	skull.scale = Vector3(0.9, 1.15, 0.95)
-	for ex in [-0.1, 0.1]:
-		var eye := part(hg, mk_sph(0.06), Vector3(ex, 0.08, 0.2), blk)
-		eye.scale = Vector3(1.0, 1.2, 0.6)
-	part(hg, mk_box(Vector3(0.36, 0.06, 0.05)), Vector3(0, -0.13, 0.215), blk)
-	part(hg, mk_box(Vector3(0.32, 0.02, 0.05)), Vector3(0, -0.105, 0.222), teeth)
-	part(hg, mk_box(Vector3(0.32, 0.02, 0.05)), Vector3(0, -0.155, 0.222), teeth)
-	for sx in [-1.0, 1.0]:
-		var cr := part(hg, mk_box(Vector3(0.1, 0.035, 0.05)), Vector3(sx * 0.19, -0.1, 0.205), blk)
-		cr.rotation.z = sx * 0.6
-	# the password clue on the right forearm
-	var lab := Label3D.new()
-	lab.text = "VERITY"
-	lab.font_size = 40
-	lab.pixel_size = 0.0035
-	lab.shaded = true
-	lab.modulate = Color(0.22, 0.02, 0.0)
-	lab.rotation_degrees.z = 90
-	lab.position = Vector3(-0.4, 1.4, 0.066)
-	m.add_child(lab)
-	return m
 
-
-func build_monster() -> void:
-	var mon := make_verity()
-	mon.position = Vector3(11, 0, -10)
-	mon.rotation_degrees.y = -90
-	add_child(mon)
-	var sb := StaticBody3D.new()
-	sb.position = Vector3(11, 1.8, -10)
-	var cs := CollisionShape3D.new()
-	var shp := BoxShape3D.new()
-	shp.size = Vector3(0.8, 3.6, 0.9)
-	cs.shape = shp
-	sb.add_child(cs)
-	add_child(sb)
-
-
-func make_follower() -> void:
-	follower = make_verity()
-	follower.visible = false
-	follower.position = Vector3(0, -4, -45)
-	add_child(follower)
-
-
-func make_player() -> void:
-	player = CharacterBody3D.new()
-	var c := CollisionShape3D.new()
-	var s := CapsuleShape3D.new()
-	s.radius = 0.35
-	s.height = 1.7
-	c.shape = s
-	c.position.y = 0.85
-	player.add_child(c)
-	player.position = Vector3(0, 0.05, 4)
-	add_child(player)
-	cam = Camera3D.new()
-	cam.position.y = 1.6
-	cam.fov = 75
-	cam.far = 70
-	player.add_child(cam)
-	flash = SpotLight3D.new()
-	flash.light_energy = 4.0
-	flash.spot_range = 26
-	flash.spot_angle = 30
-	flash.shadow_enabled = true
-	cam.add_child(flash)
-
-
-# ---------- interactions ----------
-func setup_items() -> void:
-	items = [
-		{"node": term_node, "r": 2.8, "msg": "PASSWORD", "active": term_active, "run": open_kp},
-		{"node": key_node, "r": 2.6, "msg": "PICK UP", "active": key_active, "run": take_key},
-		{"node": door, "r": 3.4, "msg": "USE", "active": door_active, "run": use_door},
-	]
-	for i in crates.size():
-		var c: Dictionary = crates[i]
-		if i == 4:
-			items.append({"node": c["root"], "r": 2.6, "msg": "OPEN", "active": crate_active, "run": open_crate})
-		else:
-			items.append({"node": c["root"], "r": 2.4, "msg": "SEARCH", "active": empty_active, "run": empty_crate})
-
-
-func term_active() -> bool:
-	return not term_ok
-
-func key_active() -> bool:
-	return vault_open and not has_key
-
-func door_active() -> bool:
-	return not door_open
-
-func crate_active() -> bool:
-	return door_open and not crate_opened
-
-func empty_active() -> bool:
-	return door_open
-
-
-func near() -> Dictionary:
-	var best: Dictionary = {}
-	var bd := 99.0
-	for it in items:
-		if not it["active"].call():
-			continue
-		var p: Vector3 = (it["node"] as Node3D).global_position
-		var d := Vector2(player.position.x - p.x, player.position.z - p.z).length()
-		if d < it["r"] and d < bd:
-			best = it
-			bd = d
-	return best
-
-
-func open_kp() -> void:
-	kp_open = true
-	buf = ""
-	disp.text = "_"
-	kp_ui.visible = true
-
-
-func take_key() -> void:
-	has_key = true
-	key_node.visible = false
-	key_light.visible = false
-	inv_lbl.text = "KEY: MASTER KEY"
-	toast("Master key acquired")
-
-
-func use_door() -> void:
-	if not has_key:
-		toast("LOCKED. It needs the master key.")
-		return
-	door_open = true
-	set_led(door_led, Color(0, 1, 0.3))
-	slide_up(door, 3.0)
-	hl_plate.visible = true
-	hl_spot.visible = true
-	toast("The door grinds open...")
-
-
-func empty_crate() -> void:
-	toast("Empty.")
-
-
-func slide_up(n: Node3D, t: float) -> void:
-	var col := n.get_node_or_null("col") as CollisionShape3D
-	if col:
-		col.set_deferred("disabled", true)
-	create_tween().tween_property(n, "position:y", n.position.y + 5.0, t)
-
-
-func flash_red() -> void:
-	red_rect.color.a = 0.55
-	create_tween().tween_property(red_rect, "color:a", 0.0, 0.9)
-
-
-func open_crate() -> void:
-	crate_opened = true
-	hl_spot.visible = false
-	hl_plate.visible = false
-	var root: Node3D = hl_crate["root"]
-	var lid: Node3D = hl_crate["lid"]
-	# the box rattles
-	var tw := create_tween()
-	for i in 10:
-		tw.tween_property(root, "rotation:z", 0.05 if i % 2 == 0 else -0.05, 0.06)
-	tw.tween_property(root, "rotation:z", 0.0, 0.05)
-	await tw.finished
-	# the lid flies off
-	shake = 1.0
-	flash_red()
-	follower.position = Vector3(root.position.x, -3.8, root.position.z)
-	follower.rotation = Vector3.ZERO
-	follower.visible = true
-	var tl := create_tween().set_parallel(true)
-	tl.tween_property(lid, "position", Vector3(1.9, 0.5, 0.6), 0.3)
-	tl.tween_property(lid, "rotation:z", -1.2, 0.3)
-	await get_tree().create_timer(0.5).timeout
-	# Verity rises out of the box
-	var tr := create_tween()
-	tr.tween_property(follower, "position:y", 1.25, 1.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await tr.finished
-	# and steps out toward the player
-	var tc := create_tween().set_parallel(true)
-	tc.tween_property(follower, "position:z", root.position.z + 2.2, 1.0)
-	tc.tween_property(follower, "position:y", 0.0, 1.0)
-	await tc.finished
-	shake = 0.5
-	following = true
-
-
-func press_key(ch: String) -> void:
-	if buf.length() < 10:
-		buf += ch
-		disp.text = buf
-
-
-func key_del() -> void:
-	buf = buf.substr(0, buf.length() - 1)
-	disp.text = buf if buf != "" else "_"
-
-
-func key_close() -> void:
-	kp_ui.visible = false
-	kp_open = false
-
-
-func key_enter() -> void:
-	if buf == "VERITY":
-		term_ok = true
-		vault_open = true
-		set_led(term_led, Color(0, 1, 0.3))
-		term_label.text = "ACCESS\nGRANTED"
-		key_close()
-		slide_up(vault_door, 2.0)
-		toast("Vault unlocked")
+	if smiley_face:
+		attach_smiley_face(hg, 0.235, 0.24)
 	else:
-		buf = ""
-		disp.text = "ACCESS DENIED"
-		await get_tree().create_timer(0.9).timeout
-		if buf == "":
-			disp.text = "_"
-
-
-func toast(t: String) -> void:
-	toast_lbl.text = t
-	toast_lbl.modulate.a = 1.0
-	var tw := create_tween()
-	tw.tween_interval(1.8)
-	tw.tween_property(toast_lbl, "modulate:a", 0.0, 0.5)
-
-
-# ---------- ui ----------
-func lbl(parent: Node, txt: String, size: int, col: Color, pos: Vector2, w: float) -> Label:
-	var l := Label.new()
-	l.text = txt
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", col)
-	l.position = pos
-	l.size = Vector2(w, size * 1.3)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(l)
-	return l
-
-
-func btn(parent: Node, txt: String, size: Vector2, pos: Vector2, fs: int) -> Button:
-	var b := Button.new()
-	b.text = txt
-	b.custom_minimum_size = size
-	b.size = size
-	b.position = pos
-	b.add_theme_font_size_override("font_size", fs)
-	parent.add_child(b)
-	return b
-
-
-func circle(size: float, alpha: float) -> Panel:
-	var p := Panel.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(1, 1, 1, alpha)
-	sb.set_corner_radius_all(int(size / 2))
-	sb.border_color = Color(1, 1, 1, 0.35)
-	sb.set_border_width_all(2)
-	p.add_theme_stylebox_override("panel", sb)
-	p.size = Vector2(size, size)
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return p
-
-
-func fullscreen(col: Color) -> ColorRect:
-	var c := ColorRect.new()
-	c.color = col
-	c.size = vp
-	ui.add_child(c)
-	return c
-
-
-func build_ui() -> void:
-	ui = CanvasLayer.new()
-	add_child(ui)
-	# post-processing: color grade, chromatic edge, vignette, film grain
-	var sh := Shader.new()
-	sh.code = """shader_type canvas_item;
-uniform sampler2D tex : hint_screen_texture, filter_linear;
-void fragment() {
-	vec2 uv = SCREEN_UV;
-	vec2 d = uv - vec2(0.5);
-	float ca = length(d) * 0.02;
-	vec3 c;
-	c.r = texture(tex, uv + d * ca).r;
-	c.g = texture(tex, uv).g;
-	c.b = texture(tex, uv - d * ca).b;
-	float l = dot(c, vec3(0.3, 0.59, 0.11));
-	c = mix(vec3(l), c, 0.85) * vec3(0.96, 1.0, 1.06);
-	float v = smoothstep(0.25, 0.95, length(d) * 1.35);
-	c *= 1.0 - v * 0.8;
-	float g = fract(sin(dot(uv * vec2(1280.0, 720.0) + vec2(TIME * 60.0), vec2(12.9898, 78.233))) * 43758.5453);
-	c += (g - 0.5) * 0.06;
-	COLOR = vec4(c, 1.0);
-}"""
-	var post := ColorRect.new()
-	post.size = vp
-	post.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var psm := ShaderMaterial.new()
-	psm.shader = sh
-	post.material = psm
-	ui.add_child(post)
-	# --- HUD ---
-	hud = Control.new()
-	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.visible = false
-	ui.add_child(hud)
-	stick_base = circle(120, 0.08)
-	stick_base.visible = false
-	hud.add_child(stick_base)
-	knob = circle(40, 0.5)
-	stick_base.add_child(knob)
-	use_btn = btn(hud, "USE", Vector2(100, 70), Vector2(vp.x - 130, vp.y - 100), 18)
-	sprint_btn = btn(hud, "SPRINT", Vector2(100, 70), Vector2(vp.x - 240, vp.y - 100), 16)
-	light_btn = btn(hud, "LIGHT", Vector2(100, 70), Vector2(vp.x - 185, vp.y - 185), 16)
-	hud_buttons = [use_btn, sprint_btn, light_btn]
-	for hbtn in hud_buttons:
-		hbtn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbtn.focus_mode = Control.FOCUS_NONE
-	var sbg := ColorRect.new()
-	sbg.color = Color(1, 1, 1, 0.15)
-	sbg.size = Vector2(140, 8)
-	sbg.position = Vector2(vp.x / 2 - 70, vp.y - 24)
-	sbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.add_child(sbg)
-	stam_bar = ColorRect.new()
-	stam_bar.color = Color(0.8, 0.8, 0.8)
-	stam_bar.size = Vector2(140, 8)
-	stam_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sbg.add_child(stam_bar)
-	toast_lbl = lbl(hud, "", 24, Color(0.9, 0.2, 0.2), Vector2(0, vp.y * 0.14), vp.x)
-	toast_lbl.modulate.a = 0.0
-	inv_lbl = lbl(hud, "", 18, Color(0.8, 0.8, 0.8), Vector2(10, 10), 300)
-	red_rect = ColorRect.new()
-	red_rect.color = Color(0.6, 0, 0, 0)
-	red_rect.size = vp
-	red_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui.add_child(red_rect)
-	# --- keypad ---
-	kp_ui = fullscreen(Color(0, 0, 0, 0.93))
-	kp_ui.visible = false
-	var vb := VBoxContainer.new()
-	vb.position = Vector2(vp.x / 2 - 380, vp.y / 2 - 230)
-	vb.size = Vector2(760, 460)
-	vb.add_theme_constant_override("separation", 8)
-	kp_ui.add_child(vb)
-	disp = Label.new()
-	disp.text = "_"
-	disp.add_theme_font_size_override("font_size", 44)
-	disp.add_theme_color_override("font_color", Color(0.2, 1, 0.4))
-	disp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(disp)
-	for row in ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"]:
-		var hb := HBoxContainer.new()
-		hb.alignment = BoxContainer.ALIGNMENT_CENTER
-		hb.add_theme_constant_override("separation", 6)
-		vb.add_child(hb)
-		for ch in row:
-			var kb := Button.new()
-			kb.text = ch
-			kb.custom_minimum_size = Vector2(66, 62)
-			kb.add_theme_font_size_override("font_size", 28)
-			kb.pressed.connect(press_key.bind(ch))
-			hb.add_child(kb)
-	var hb2 := HBoxContainer.new()
-	hb2.alignment = BoxContainer.ALIGNMENT_CENTER
-	hb2.add_theme_constant_override("separation", 10)
-	vb.add_child(hb2)
-	for pair in [["DEL", key_del], ["ENTER", key_enter], ["CLOSE", key_close]]:
-		var kb2 := Button.new()
-		kb2.text = pair[0]
-		kb2.custom_minimum_size = Vector2(150, 62)
-		kb2.add_theme_font_size_override("font_size", 26)
-		kb2.pressed.connect(pair[1])
-		hb2.add_child(kb2)
-	# --- settings ---
-	settings_ui = fullscreen(Color.BLACK)
-	settings_ui.visible = false
-	var sv := VBoxContainer.new()
-	sv.position = Vector2(vp.x / 2 - 260, vp.y / 2 - 200)
-	sv.size = Vector2(520, 400)
-	sv.add_theme_constant_override("separation", 14)
-	settings_ui.add_child(sv)
-	sv_lbl = Label.new()
-	sv_lbl.text = "Touch look sensitivity: 1.5"
-	sv_lbl.add_theme_font_size_override("font_size", 24)
-	sv.add_child(sv_lbl)
-	var sl := HSlider.new()
-	sl.min_value = 0.1
-	sl.max_value = 5.0
-	sl.step = 0.1
-	sl.value = 1.5
-	sl.custom_minimum_size = Vector2(520, 50)
-	sl.value_changed.connect(on_sens)
-	sv.add_child(sl)
-	var ql := Label.new()
-	ql.text = "Graphics quality"
-	ql.add_theme_font_size_override("font_size", 24)
-	sv.add_child(ql)
-	var qh := HBoxContainer.new()
-	qh.add_theme_constant_override("separation", 8)
-	sv.add_child(qh)
-	var names := ["Low", "Medium", "High", "Ultra"]
-	for i in 4:
-		var qb := Button.new()
-		qb.text = names[i]
-		qb.custom_minimum_size = Vector2(120, 60)
-		qb.add_theme_font_size_override("font_size", 22)
-		qb.pressed.connect(set_quality.bind(i))
-		qh.add_child(qb)
-	var back := Button.new()
-	back.text = "BACK"
-	back.custom_minimum_size = Vector2(200, 64)
-	back.add_theme_font_size_override("font_size", 28)
-	var wsb := StyleBoxFlat.new()
-	wsb.bg_color = Color.WHITE
-	for st in ["normal", "hover", "pressed", "focus"]:
-		back.add_theme_stylebox_override(st, wsb)
-	for cn in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		back.add_theme_color_override(cn, Color.BLACK)
-	back.pressed.connect(func(): settings_ui.visible = false)
-	sv.add_child(back)
-	# --- title (on top) ---
-	title_ui = fullscreen(Color.BLACK)
-	death_grp = Control.new()
-	death_grp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	death_grp.modulate.a = 0.0
-	title_ui.add_child(death_grp)
-	var dl := lbl(death_grp, "DEATH", 180, Color(0.75, 0.02, 0.02), Vector2(0, vp.y * 0.12), vp.x)
-	dl.add_theme_color_override("font_outline_color", Color(0.3, 0, 0))
-	dl.add_theme_constant_override("outline_size", 6)
-	for dx in [0.36, 0.5, 0.63]:
-		var dr := ColorRect.new()
-		dr.color = Color(0.54, 0.01, 0.01)
-		dr.size = Vector2(8, 0)
-		dr.position = Vector2(vp.x * dx, vp.y * 0.12 + 200)
-		dr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		death_grp.add_child(dr)
-		var dt := create_tween().set_loops()
-		dt.tween_interval(randf() * 2.0)
-		dt.tween_property(dr, "size:y", 90.0 + randf() * 60.0, 3.0)
-		dt.tween_property(dr, "size:y", 0.0, 0.01)
-	verity_lbl = lbl(title_ui, "VERITY", 150, Color(0.8, 0.8, 0.8), Vector2(0, vp.y * 0.14), vp.x)
-	verity_lbl.modulate.a = 0.0
-	menu_box = VBoxContainer.new()
-	menu_box.position = Vector2(vp.x - 270, vp.y - 180)
-	menu_box.add_theme_constant_override("separation", 14)
-	menu_box.modulate.a = 0.0
-	title_ui.add_child(menu_box)
-	bs_btn = Button.new()
-	bs_btn.text = "START"
-	bs_btn.custom_minimum_size = Vector2(220, 64)
-	bs_btn.add_theme_font_size_override("font_size", 26)
-	bs_btn.disabled = true
-	bs_btn.pressed.connect(on_start)
-	menu_box.add_child(bs_btn)
-	bt_btn = Button.new()
-	bt_btn.text = "SETTINGS"
-	bt_btn.custom_minimum_size = Vector2(220, 64)
-	bt_btn.add_theme_font_size_override("font_size", 26)
-	bt_btn.disabled = true
-	bt_btn.pressed.connect(func(): settings_ui.visible = true)
-	menu_box.add_child(bt_btn)
-	ui.move_child(settings_ui, ui.get_child_count() - 1)
-
-
-func play_title() -> void:
-	var tw := create_tween()
-	tw.tween_interval(0.5)
-	tw.tween_property(death_grp, "modulate:a", 1.0, 2.5)
-	tw.tween_interval(2.0)
-	tw.tween_property(death_grp, "modulate:a", 0.0, 1.5)
-	tw.tween_interval(1.0)
-	tw.tween_property(verity_lbl, "modulate:a", 1.0, 2.5)
-	tw.tween_interval(1.0)
-	tw.tween_property(menu_box, "modulate:a", 1.0, 2.0)
-	tw.tween_callback(enable_menu)
-
-
-func enable_menu() -> void:
-	bs_btn.disabled = false
-	bt_btn.disabled = false
-
-
-func on_start() -> void:
-	started = true
-	title_ui.visible = false
-	hud.visible = true
-
-
-func on_use() -> void:
-	var n := near()
-	if not n.is_empty():
-		n["run"].call()
-
-
-func on_sens(v: float) -> void:
-	sens = v
-	sv_lbl.text = "Touch look sensitivity: %.1f" % v
-
-
-func set_quality(i: int) -> void:
-	get_viewport().scaling_3d_scale = [0.6, 0.75, 0.9, 1.0][i]
-	get_viewport().msaa_3d = Viewport.MSAA_2X if i >= 2 else Viewport.MSAA_DISABLED
-	flash.shadow_enabled = i >= 1
-
-
-# ---------- input + loop ----------
-func hud_tap(pos: Vector2) -> bool:
-	if use_btn.get_global_rect().has_point(pos):
-		on_use()
-		return true
-	if sprint_btn.get_global_rect().has_point(pos):
-		set_sprint(not sprint)
-		return true
-	if light_btn.get_global_rect().has_point(pos):
-		flash.visible = not flash.visible
-		light_btn.modulate = Color.WHITE if flash.visible else Color(0.5, 0.5, 0.5)
-		return true
-	return false
-
-
-func set_sprint(on: bool) -> void:
-	sprint = on
-	sprint_btn.modulate = Color(1, 0.6, 0.3) if on else Color.WHITE
-
-
-func _input(e: InputEvent) -> void:
-	if not started or kp_open or settings_ui.visible:
-		return
-	if e is InputEventScreenTouch:
-		var t := e as InputEventScreenTouch
-		if t.pressed:
-			if hud_tap(t.position):
-				return
-			if t.position.x < vp.x * 0.5:
-				if stick_id == -1:
-					stick_id = t.index
-					stick_origin = t.position
-					stick_base.position = t.position - stick_base.size / 2
-					stick_base.visible = true
-					knob.position = (stick_base.size - knob.size) / 2
-			elif look_id == -1:
-				look_id = t.index
-		else:
-			if t.index == stick_id:
-				stick_id = -1
-				move_vec = Vector2.ZERO
-				stick_base.visible = false
-			elif t.index == look_id:
-				look_id = -1
-	elif e is InputEventScreenDrag:
-		var d := e as InputEventScreenDrag
-		if d.index == stick_id:
-			var off := (d.position - stick_origin).limit_length(50.0)
-			move_vec = off / 50.0
-			knob.position = (stick_base.size - knob.size) / 2 + off
-		elif d.index == look_id:
-			yaw -= d.relative.x * 0.003 * sens
-			pitch = clampf(pitch - d.relative.y * 0.003 * sens, -1.4, 1.4)
-			player.rotation.y = yaw
-			cam.rotation.x = pitch
-
-
-func _process(delta: float) -> void:
-	for l in lamps:
-		var light: OmniLight3D = l["l"]
-		if randf() < 0.015:
-			light.light_energy = randf() * 0.3
-		else:
-			light.light_energy = lerpf(light.light_energy, l["b"], 0.2)
-	if not started:
-		return
-	var n := near()
-	if n.is_empty():
-		use_btn.text = "USE"
-		use_btn.modulate = Color.WHITE
-	else:
-		use_btn.text = n["msg"]
-		use_btn.modulate = Color(1, 0.4, 0.4)
-	key_node.rotation.y += delta * 1.5
-	key_node.position.y = 1.6 + sin(Time.get_ticks_msec() / 400.0) * 0.08
-	stam_bar.size.x = 140.0 * stamina
-	if hl_spot.visible:
-		hl_spot.light_energy = 3.0 + sin(Time.get_ticks_msec() / 180.0) * 1.5
-	cam.h_offset = randf_range(-1.0, 1.0) * shake * 0.08
-	cam.v_offset = randf_range(-1.0, 1.0) * shake * 0.08
-	shake = maxf(0.0, shake - delta * 0.8)
-
-
-func _physics_process(delta: float) -> void:
-	if not started or kp_open or settings_ui.visible:
-		return
-	if following:
-		var dv := Vector3(player.position.x - follower.position.x, 0.0, player.position.z - follower.position.z)
-		follower.rotation.y = atan2(dv.x, dv.z)
-		if dv.length() > 2.0:
-			follower.position += dv.normalized() * 2.3 * delta
-		follower.position.y = absf(sin(Time.get_ticks_msec() / 260.0)) * 0.05
-		follower.rotation.z = sin(Time.get_ticks_msec() / 420.0) * 0.03
-	var mv := move_vec
-	if stick_id == -1:
-		mv = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	var moving := mv.length() > 0.05
-	var sp := 2.8
-	if sprint and moving and stamina > 0.0:
-		sp = 5.0
-		stamina = maxf(0.0, stamina - 0.25 * delta)
-		if stamina <= 0.0:
-			set_sprint(false)
-	else:
-		stamina = minf(1.0, stamina + 0.15 * delta)
-	var dir := player.global_transform.basis * Vector3(mv.x, 0, mv.y)
-	player.velocity.x = dir.x * sp
-	player.velocity.z = dir.z * sp
-	if player.is_on_floor():
-		player.velocity.y = -0.1
-	else:
-		player.velocity.y -= 20.0 * delta
-	player.move_and_slide()
+		for ex in [-0.1, 0.1
