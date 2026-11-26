@@ -699,6 +699,7 @@ func make_player() -> void:
 	cam.fov = 75
 	cam.far = 90
 	player.add_child(cam)
+    cam.make_current()
 	flash = SpotLight3D.new()
 	flash.light_energy = 9.0
 	flash.spot_range = 45
