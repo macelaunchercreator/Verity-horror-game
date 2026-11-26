@@ -14,7 +14,7 @@ jobs:
         run: |
           mkdir -p build
           docker run --rm -v "$PWD":/work -w /work barichello/godot-ci:4.3 bash -c '
-            godot --headless --verbose --editor --quit || true
+            godot --headless --verbose --editor --quit
             godot --headless --verbose --export-debug "Android Debug" build/DEATH.apk
           '
 
